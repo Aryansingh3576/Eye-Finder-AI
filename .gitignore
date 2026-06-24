@@ -1,0 +1,18 @@
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Diagnostic/helper scripts containing secrets
+get_refresh_token.py
+
+# Logs and local debug files
+drive_sync_debug.log
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# IDE configs and temporary files
+.qodo/
+.vscode/
+.idea/
+.DS_Store
