@@ -236,11 +236,20 @@ st.markdown(f"""
         color: var(--text-primary) !important;
         font-family: 'Inter', sans-serif !important;
     }}
+
+    /* Hide default Streamlit elements (header, footer, menu, decorations) */
+    [data-testid="stHeader"], header, footer, [data-testid="stFooter"], #MainMenu, [data-testid="stDecoration"] {{
+        visibility: hidden !important;
+        display: none !important;
+        height: 0 !important;
+        width: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }}
     
     [data-testid="stMainBlockContainer"], 
     [data-testid="stVerticalBlock"], 
-    [data-testid="stVerticalBlockBorderWrapper"],
-    [data-testid="stHeader"] {{
+    [data-testid="stVerticalBlockBorderWrapper"] {{
         background: transparent !important;
     }}
     
