@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import re
 import time
+import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
@@ -128,6 +129,12 @@ if "total_leads_found" not in st.session_state:
     st.session_state.total_leads_found = 0
 if "scan_engine" not in st.session_state:
     st.session_state.scan_engine = "osm"
+if "outreach_history" not in st.session_state:
+    st.session_state.outreach_history = []
+if "outreach_history_loaded" not in st.session_state:
+    st.session_state.outreach_history_loaded = False
+if "outreach_log_pending" not in st.session_state:
+    st.session_state.outreach_log_pending = None
 
 # ==========================================
 # DYNAMIC CLINICAL THEMES CONFIGURATION
@@ -1159,6 +1166,165 @@ st.markdown(f"""
         border-top-color: var(--primary-accent) !important;
         border-left-color: var(--primary-accent) !important;
     }}
+
+    /* ====== OUTREACH HISTORY STYLES ====== */
+    .outreach-history-header {{
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px 24px;
+        background: linear-gradient(135deg, rgba(6,182,212,0.08) 0%, rgba(59,130,246,0.05) 50%, rgba(168,85,247,0.08) 100%);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        margin: 20px 0 16px 0;
+    }}
+    .outreach-history-header .oh-icon {{
+        font-size: 1.6rem;
+    }}
+    .outreach-history-header .oh-title {{
+        font-family: 'Orbitron', sans-serif;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--primary-accent);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }}
+    .outreach-history-header .oh-subtitle {{
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }}
+
+    .outreach-stats-grid {{
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 12px 0 18px 0;
+    }}
+    .outreach-stat-card {{
+        background: var(--card-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+    }}
+    .outreach-stat-card:hover {{
+        border-color: var(--primary-accent);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }}
+    .outreach-stat-card .stat-value {{
+        font-family: 'Orbitron', sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary-accent);
+        display: block;
+    }}
+    .outreach-stat-card .stat-label {{
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-top: 4px;
+        display: block;
+    }}
+
+    .outreach-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.5px;
+        animation: fadeIn 0.4s ease;
+    }}
+    .outreach-badge-wa {{
+        background: rgba(37, 211, 102, 0.1);
+        border: 1px solid rgba(37, 211, 102, 0.35);
+        color: #25d366;
+    }}
+    .outreach-badge-email {{
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        color: #60a5fa;
+    }}
+    .outreach-badge-both {{
+        background: rgba(168, 85, 247, 0.1);
+        border: 1px solid rgba(168, 85, 247, 0.35);
+        color: #c084fc;
+    }}
+
+    .history-row {{
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 18px;
+        background: var(--card-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        margin-bottom: 8px;
+        transition: all 0.25s ease;
+        backdrop-filter: blur(8px);
+    }}
+    .history-row:hover {{
+        border-color: var(--primary-accent);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }}
+    .history-row .hr-channel {{
+        font-size: 1.4rem;
+        min-width: 36px;
+        text-align: center;
+    }}
+    .history-row .hr-info {{
+        flex: 1;
+    }}
+    .history-row .hr-name {{
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--text-primary);
+    }}
+    .history-row .hr-meta {{
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }}
+    .history-row .hr-time {{
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+    }}
+    .history-row .hr-status {{
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.65rem;
+        letter-spacing: 0.5px;
+    }}
+    .hr-status-sent {{
+        background: rgba(16, 185, 129, 0.12);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        color: #10b981;
+    }}
+    .hr-status-resend {{
+        background: rgba(245, 158, 11, 0.12);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        color: #f59e0b;
+    }}
+
+    @media (max-width: 768px) {{
+        .outreach-stats-grid {{
+            grid-template-columns: repeat(2, 1fr);
+        }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1331,6 +1497,89 @@ def format_whatsapp_link(phone_str):
     if len(clean_num) == 10: clean_num = "91" + clean_num
     elif len(clean_num) > 10 and clean_num.startswith("0"): clean_num = "91" + clean_num[1:]
     return f"https://wa.me/{clean_num}"
+
+# ==========================================
+# OUTREACH HISTORY: RECORD, LOAD, SAVE
+# ==========================================
+OUTREACH_HISTORY_FILENAME = "outreach_history.json"
+
+def record_outreach(business_name, category, address, phone, channel, campaign_type, city, state):
+    """Record an outreach action into session state history."""
+    entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "business_name": business_name,
+        "category": category,
+        "address": address,
+        "phone": phone,
+        "channel": channel,  # 'WhatsApp' or 'Email'
+        "campaign_type": campaign_type,
+        "city": city,
+        "state": state,
+        "status": "Sent"
+    }
+    # Check for duplicate (same lead + channel) — mark as re-send
+    for existing in st.session_state.outreach_history:
+        if existing["business_name"].strip().lower() == business_name.strip().lower() and existing["channel"] == channel:
+            existing["status"] = "Re-sent"
+    st.session_state.outreach_history.insert(0, entry)
+    # Trigger async save to Drive
+    save_outreach_history_to_drive()
+
+def get_lead_outreach_info(business_name):
+    """Check if a lead has been contacted before. Returns list of matching records."""
+    matches = []
+    for record in st.session_state.outreach_history:
+        if record["business_name"].strip().lower() == business_name.strip().lower():
+            matches.append(record)
+    return matches
+
+def save_outreach_history_to_drive():
+    """Save outreach history JSON to Google Drive."""
+    try:
+        drive_service = connect_google_drive()
+        if not drive_service:
+            return
+        history_json = json.dumps(st.session_state.outreach_history, indent=2)
+        json_bytes = history_json.encode('utf-8')
+        media = MediaIoBaseUpload(BytesIO(json_bytes), mimetype='application/json', resumable=True)
+        # Search for existing file
+        query = f"name='{OUTREACH_HISTORY_FILENAME}' and '{DRIVE_FOLDER_ID}' in parents and trashed=false"
+        results = drive_service.files().list(q=query, spaces='drive', fields='files(id)').execute()
+        items = results.get('files', [])
+        if items:
+            drive_service.files().update(fileId=items[0]['id'], media_body=media).execute()
+        else:
+            file_metadata = {'name': OUTREACH_HISTORY_FILENAME, 'parents': [DRIVE_FOLDER_ID]}
+            drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    except Exception as e:
+        log_debug(f"Outreach history save error: {str(e)}")
+
+def load_outreach_history_from_drive():
+    """Load outreach history JSON from Google Drive on startup."""
+    if st.session_state.outreach_history_loaded:
+        return
+    try:
+        drive_service = connect_google_drive()
+        if not drive_service:
+            st.session_state.outreach_history_loaded = True
+            return
+        query = f"name='{OUTREACH_HISTORY_FILENAME}' and '{DRIVE_FOLDER_ID}' in parents and trashed=false"
+        results = drive_service.files().list(q=query, spaces='drive', fields='files(id)').execute()
+        items = results.get('files', [])
+        if items:
+            request = drive_service.files().get_media(fileId=items[0]['id'])
+            downloaded = BytesIO()
+            downloader = MediaIoBaseDownload(downloaded, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+            downloaded.seek(0)
+            history_data = json.loads(downloaded.read().decode('utf-8'))
+            if isinstance(history_data, list):
+                st.session_state.outreach_history = history_data
+    except Exception as e:
+        log_debug(f"Outreach history load error: {str(e)}")
+    st.session_state.outreach_history_loaded = True
 
 def backup_web_scraper(business_name, location):
     phone = "N/A"
@@ -2270,6 +2519,9 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
 
     # Tab 2: Personalized Outreach Template Builder
     with tab2:
+        # Load outreach history from Drive on first load
+        load_outreach_history_from_drive()
+
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: var(--primary-accent); font-family: \"Outfit\", sans-serif; font-weight: 700;'>💬 SMART OUTREACH GENERATOR</h4>", unsafe_allow_html=True)
         st.write("Generate and copy personalized messages or instantly initiate WhatsApp chats and emails with targeted clients.")
@@ -2279,6 +2531,30 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
             lead_df = filtered_df if not filtered_df.empty else display_df
             lead_names = lead_df["Business Name"].tolist()
             selected_lead = st.selectbox("Select Target Lead:", lead_names)
+            
+            # ---- Previously Contacted Badge ----
+            prior_outreach = get_lead_outreach_info(selected_lead)
+            if prior_outreach:
+                channels_used = list(set(r["channel"] for r in prior_outreach))
+                last_contact = prior_outreach[0]  # most recent (list is newest-first)
+                if len(channels_used) > 1:
+                    badge_class = "outreach-badge-both"
+                    badge_icon = "🔄"
+                    badge_text = f"Contacted {len(prior_outreach)}x via {', '.join(channels_used)}"
+                elif channels_used[0] == "WhatsApp":
+                    badge_class = "outreach-badge-wa"
+                    badge_icon = "💬"
+                    badge_text = f"WhatsApp sent on {last_contact['timestamp'][:10]}"
+                else:
+                    badge_class = "outreach-badge-email"
+                    badge_icon = "📧"
+                    badge_text = f"Email sent on {last_contact['timestamp'][:10]}"
+                st.markdown(f"""
+                <div class="outreach-badge {badge_class}">
+                    <span>{badge_icon}</span>
+                    <span>✅ {badge_text}</span>
+                </div>
+                """, unsafe_allow_html=True)
             
             campaign_type = st.selectbox("Select Campaign Template:", [
                 "B2B Partnership Proposal",
@@ -2295,6 +2571,16 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
         lead_phone = lead_row["Phone"]
         lead_category = lead_row["Category"]
         lead_address = lead_row["Address"]
+        current_city = st.session_state.get("current_city", "Unknown")
+        current_state = st.session_state.get("scan_state", "")
+        # Resolve state from LOCATION_MATRIX if not set
+        if not current_state or current_state == "Select State...":
+            for s, cities in LOCATION_MATRIX.items():
+                if current_city in cities or current_city.replace(" (Multi-City)", "") == s:
+                    current_state = s
+                    break
+            if not current_state or current_state == "Select State...":
+                current_state = "Unknown"
         
         # Build templates based on selected category & details
         if campaign_type == "B2B Partnership Proposal":
@@ -2352,11 +2638,11 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
             st.markdown(f"**Subject:** `{subject}`")
             st.text_area("Generated Outreach Message:", value=message, height=250)
             
-            # Action Buttons
+            # Action Buttons — Log outreach then open link
             action_col1, action_col2 = st.columns(2)
             
             with action_col1:
-                # Send WhatsApp Link
+                # WhatsApp — Log + Send
                 if lead_phone != "N/A":
                     encoded_msg = urllib.parse.quote(message)
                     clean_phone = re.sub(r'\D', '', lead_phone)
@@ -2364,18 +2650,132 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
                         clean_phone = "91" + clean_phone
                     elif len(clean_phone) > 10 and clean_phone.startswith("0"):
                         clean_phone = "91" + clean_phone[1:]
-                    
                     wa_url = f"https://wa.me/{clean_phone}?text={encoded_msg}"
-                    st.link_button("💬 SEND VIA WHATSAPP", wa_url, use_container_width=True)
+                    
+                    if st.button("📲 LOG & SEND WHATSAPP", key="btn_wa_log", use_container_width=True):
+                        record_outreach(selected_lead, lead_category, lead_address, lead_phone, "WhatsApp", campaign_type, current_city, current_state)
+                        st.session_state.outreach_log_pending = "whatsapp"
+                        st.rerun()
+                    
+                    # Show the actual link after logging
+                    if st.session_state.get("outreach_log_pending") == "whatsapp":
+                        st.success("✅ Outreach logged! Click below to open WhatsApp:")
+                        st.link_button("💬 OPEN WHATSAPP NOW", wa_url, use_container_width=True)
+                        st.session_state.outreach_log_pending = None
                 else:
                     st.button("💬 WhatsApp N/A", disabled=True, use_container_width=True)
             
             with action_col2:
-                # Email mailto link
+                # Email — Log + Send
                 encoded_subject = urllib.parse.quote(subject)
                 encoded_body = urllib.parse.quote(message)
                 mailto_url = f"mailto:?subject={encoded_subject}&body={encoded_body}"
-                st.link_button("📧 COMPOSE EMAIL", mailto_url, use_container_width=True)
+                
+                if st.button("📨 LOG & COMPOSE EMAIL", key="btn_email_log", use_container_width=True):
+                    record_outreach(selected_lead, lead_category, lead_address, lead_phone, "Email", campaign_type, current_city, current_state)
+                    st.session_state.outreach_log_pending = "email"
+                    st.rerun()
+                
+                # Show the actual link after logging
+                if st.session_state.get("outreach_log_pending") == "email":
+                    st.success("✅ Outreach logged! Click below to compose email:")
+                    st.link_button("📧 OPEN EMAIL NOW", mailto_url, use_container_width=True)
+                    st.session_state.outreach_log_pending = None
+
+        # ============================================
+        # 📋 OUTREACH HISTORY LOG PANEL
+        # ============================================
+        st.markdown("<hr style='border-color: var(--panel-border); margin: 30px 0 10px 0;'>", unsafe_allow_html=True)
+        
+        history = st.session_state.outreach_history
+        total_outreach = len(history)
+        wa_count = sum(1 for h in history if h["channel"] == "WhatsApp")
+        email_count = sum(1 for h in history if h["channel"] == "Email")
+        unique_leads = len(set(h["business_name"].strip().lower() for h in history)) if history else 0
+        
+        # History Header
+        st.markdown(f"""
+        <div class="outreach-history-header">
+            <div class="oh-icon">📋</div>
+            <div>
+                <div class="oh-title">OUTREACH HISTORY LOG</div>
+                <div class="oh-subtitle">TOTAL ACTIONS: {total_outreach} // UNIQUE LEADS: {unique_leads} // SESSION ACTIVE</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Stats Grid
+        st.markdown(f"""
+        <div class="outreach-stats-grid">
+            <div class="outreach-stat-card">
+                <span class="stat-value">{total_outreach}</span>
+                <span class="stat-label">Total Outreach</span>
+            </div>
+            <div class="outreach-stat-card">
+                <span class="stat-value">{wa_count}</span>
+                <span class="stat-label">💬 WhatsApp</span>
+            </div>
+            <div class="outreach-stat-card">
+                <span class="stat-value">{email_count}</span>
+                <span class="stat-label">📧 Email</span>
+            </div>
+            <div class="outreach-stat-card">
+                <span class="stat-value">{unique_leads}</span>
+                <span class="stat-label">Unique Leads</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if history:
+            # Controls: Filter, Export, Clear
+            ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 1, 1])
+            with ctrl_col1:
+                history_filter = st.selectbox("Filter History:", ["All", "WhatsApp Only", "Email Only"], key="history_filter_select")
+            with ctrl_col2:
+                # Export CSV
+                history_df = pd.DataFrame(history)
+                csv_data = history_df.to_csv(index=False).encode('utf-8')
+                st.download_button("💾 EXPORT LOG", csv_data, "outreach_history.csv", "text/csv", use_container_width=True, key="export_outreach_csv")
+            with ctrl_col3:
+                if st.button("🗑️ CLEAR HISTORY", use_container_width=True, key="clear_outreach_history"):
+                    st.session_state.outreach_history = []
+                    save_outreach_history_to_drive()
+                    st.rerun()
+            
+            # Filter the history
+            filtered_history = history
+            if history_filter == "WhatsApp Only":
+                filtered_history = [h for h in history if h["channel"] == "WhatsApp"]
+            elif history_filter == "Email Only":
+                filtered_history = [h for h in history if h["channel"] == "Email"]
+            
+            # Render history rows
+            if filtered_history:
+                for record in filtered_history:
+                    channel_icon = "💬" if record["channel"] == "WhatsApp" else "📧"
+                    status_class = "hr-status-resend" if record["status"] == "Re-sent" else "hr-status-sent"
+                    status_label = record["status"].upper()
+                    st.markdown(f"""
+                    <div class="history-row">
+                        <div class="hr-channel">{channel_icon}</div>
+                        <div class="hr-info">
+                            <div class="hr-name">{record['business_name']}</div>
+                            <div class="hr-meta">{record['category']} • {record.get('city', 'N/A')}, {record.get('state', '')} • {record['campaign_type']}</div>
+                        </div>
+                        <div class="hr-time">{record['timestamp']}</div>
+                        <div class="hr-status {status_class}">{status_label}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info(f"No {history_filter.replace(' Only', '').lower()} outreach records found.")
+        else:
+            st.markdown("""
+            <div style='text-align: center; padding: 40px 20px; color: var(--text-muted); font-family: "Share Tech Mono", monospace;'>
+                <div style='font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5;'>📭</div>
+                <div style='font-size: 0.85rem; letter-spacing: 1px;'>NO OUTREACH HISTORY YET</div>
+                <div style='font-size: 0.72rem; margin-top: 6px; opacity: 0.7;'>Send a WhatsApp message or email to start tracking your outreach.</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 
