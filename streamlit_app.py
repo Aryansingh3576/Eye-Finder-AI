@@ -725,7 +725,6 @@ st.markdown(f"""
     div[role="tooltip"],
     div[data-baseweb="popover"],
     div[data-baseweb="select"] > div,
-    div[data-baseweb="select"] div,
     div[data-baseweb="input"] input,
     div[data-baseweb="textarea"] textarea,
     ul[role="listbox"],
@@ -1320,6 +1319,91 @@ st.markdown(f"""
         color: #f59e0b;
     }}
 
+    /* ====== SMART FOLLOW-UP STYLES ====== */
+    .outreach-badge-due {{
+        background: rgba(249, 115, 22, 0.12);
+        border: 1px solid rgba(249, 115, 22, 0.35);
+        color: #f97316;
+    }}
+    .outreach-badge-ok {{
+        background: rgba(16, 185, 129, 0.12);
+        border: 1px solid rgba(16, 185, 129, 0.35);
+        color: #10b981;
+    }}
+    .timeline-container {{
+        border-left: 2px dashed var(--primary-accent);
+        padding-left: 20px;
+        margin-left: 10px;
+        margin-top: 15px;
+        margin-bottom: 20px;
+    }}
+    .timeline-node {{
+        position: relative;
+        margin-bottom: 18px;
+    }}
+    .timeline-node::before {{
+        content: '●';
+        position: absolute;
+        left: -27px;
+        top: -2px;
+        font-size: 1.1rem;
+    }}
+    .timeline-node.completed::before {{
+        color: var(--primary-accent);
+        text-shadow: 0 0 8px var(--primary-accent);
+    }}
+    .timeline-node.pending::before {{
+        color: #f97316;
+        text-shadow: 0 0 8px #f97316;
+    }}
+    .timeline-label {{
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }}
+    .timeline-title {{
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }}
+    .due-card {{
+        background: rgba(249, 115, 22, 0.04);
+        border: 1px solid rgba(249, 115, 22, 0.15);
+        border-radius: 10px;
+        padding: 12px 18px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.25s ease;
+    }}
+    .due-card:hover {{
+        border-color: #f97316;
+        box-shadow: 0 4px 16px rgba(249, 115, 22, 0.15);
+    }}
+    .due-title {{
+        color: #f97316;
+        font-weight: 700;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.85rem;
+    }}
+    .due-subtitle {{
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }}
+
+    /* Fix for multiselect tag alignment and clipping */
+    div[data-baseweb="select"] span[data-baseweb="tag"],
+    div[data-baseweb="select"] div[data-baseweb="tag"] {{
+        margin-left: 6px !important;
+    }}
+    
+    div[data-baseweb="select"] > div > div {{
+        background-color: transparent !important;
+        background: transparent !important;
+    }}
+
     @media (max-width: 768px) {{
         .outreach-stats-grid {{
             grid-template-columns: repeat(2, 1fr);
@@ -1505,6 +1589,10 @@ OUTREACH_HISTORY_FILENAME = "outreach_history.json"
 
 def record_outreach(business_name, category, address, phone, channel, campaign_type, city, state):
     """Record an outreach action into session state history."""
+    # Calculate the sequence stage number for this lead
+    prior = get_lead_outreach_info(business_name)
+    stage = len(prior) + 1
+    
     entry = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "business_name": business_name,
@@ -1515,7 +1603,8 @@ def record_outreach(business_name, category, address, phone, channel, campaign_t
         "campaign_type": campaign_type,
         "city": city,
         "state": state,
-        "status": "Sent"
+        "status": "Sent",
+        "stage": stage
     }
     # Check for duplicate (same lead + channel) — mark as re-send
     for existing in st.session_state.outreach_history:
@@ -2526,6 +2615,79 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
         st.markdown("<h4 style='color: var(--primary-accent); font-family: \"Outfit\", sans-serif; font-weight: 700;'>💬 SMART OUTREACH GENERATOR</h4>", unsafe_allow_html=True)
         st.write("Generate and copy personalized messages or instantly initiate WhatsApp chats and emails with targeted clients.")
         
+        # ==========================================
+        # [START] SMART FOLLOW-UP RADAR HUD
+        # ==========================================
+        history = st.session_state.outreach_history
+        threshold_days = 3  # default follow-up threshold in days
+        due_leads = []
+        
+        # Group history by business name to get the newest contact for each
+        newest_contacts = {}
+        for h in history:
+            bname = h["business_name"].strip().lower()
+            if bname not in newest_contacts:
+                newest_contacts[bname] = h
+            else:
+                try:
+                    t_existing = datetime.strptime(newest_contacts[bname]["timestamp"], "%Y-%m-%d %H:%M:%S")
+                    t_new = datetime.strptime(h["timestamp"], "%Y-%m-%d %H:%M:%S")
+                    if t_new > t_existing:
+                        newest_contacts[bname] = h
+                except Exception:
+                    pass
+        
+        # Check which of these are older than threshold_days
+        now = datetime.now()
+        for bname, record in newest_contacts.items():
+            try:
+                contact_date = datetime.strptime(record["timestamp"], "%Y-%m-%d %H:%M:%S")
+                days_since = (now - contact_date).days
+                if days_since >= threshold_days:
+                    due_leads.append({
+                        "business_name": record["business_name"],
+                        "category": record["category"],
+                        "last_channel": record["channel"],
+                        "last_stage": record.get("stage", 1),
+                        "days_since": days_since,
+                        "timestamp": record["timestamp"]
+                    })
+            except Exception:
+                pass
+                
+        # Render Follow-Up Radar UI
+        st.markdown("<h5 style='color: var(--primary-accent); font-family: \"Orbitron\", sans-serif; font-weight: 700; margin-top: 25px; letter-spacing: 1.5px;'>🚨 SMART FOLLOW-UP RADAR</h5>", unsafe_allow_html=True)
+        if due_leads:
+            st.markdown(f"<div style='font-family: \"Share Tech Mono\", monospace; font-size: 0.78rem; color: var(--warning-accent); margin-bottom: 12px;'>⏰ DETECTED COLD LEADS ({len(due_leads)} REQUIRE IMMEDIATE ATTENTION):</div>", unsafe_allow_html=True)
+            
+            # Display due leads in a clean 2-column grid
+            due_col1, due_col2 = st.columns([1, 1])
+            for idx, item in enumerate(due_leads[:4]):
+                col_target = due_col1 if idx % 2 == 0 else due_col2
+                with col_target:
+                    st.markdown(f"""
+                    <div class="due-card">
+                        <div>
+                            <div class="due-title">⚠️ {item['business_name']}</div>
+                            <div class="due-subtitle">{item['category']} • Contacted {item['days_since']}d ago ({item['last_channel']})</div>
+                        </div>
+                        <span style="font-family: 'Share Tech Mono', monospace; font-size: 0.72rem; background: #ea580c; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 700; text-shadow: none;">STAGE {item['last_stage']}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            if len(due_leads) > 4:
+                st.markdown(f"<div style='font-family: \"Share Tech Mono\", monospace; font-size: 0.7rem; color: var(--text-muted); text-align: right; margin-top: 5px;'>and {len(due_leads) - 4} more leads are due for follow-up...</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style='display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: rgba(16, 185, 129, 0.04); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 8px; margin-bottom: 20px;'>
+                <span style='color: #10b981; font-size: 1.1rem;'>🎉</span>
+                <span style='font-family: "Share Tech Mono", monospace; font-size: 0.72rem; color: var(--text-muted);'>ALL RECENT LEADS ARE UP-TO-DATE. NO URGENT FOLLOW-UPS PENDING.</span>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        # ==========================================
+        # [END] SMART FOLLOW-UP RADAR HUD
+        # ==========================================
+
         outreach_panel1, outreach_panel2 = st.columns([1, 1])
         with outreach_panel1:
             lead_df = filtered_df if not filtered_df.empty else display_df
@@ -2556,12 +2718,26 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
                 </div>
                 """, unsafe_allow_html=True)
             
-            campaign_type = st.selectbox("Select Campaign Template:", [
+            # Calculate next stage based on history count
+            next_stage = len(prior_outreach) + 1
+            
+            # Select Campaign Template options based on stage
+            templates = [
                 "B2B Partnership Proposal",
                 "Advanced Equipment Supply",
                 "Software/EMR Demo Pitch",
                 "📧 Email Introduction"
-            ])
+            ]
+            
+            if next_stage >= 2:
+                # Add follow-up options if they have been contacted
+                templates.extend([
+                    "Follow-up 1: Quick Check-in",
+                    "Follow-up 2: Demo Proposal",
+                    "Follow-up 3: Custom Offer"
+                ])
+            
+            campaign_type = st.selectbox("Select Campaign Template:", templates)
             
             sender_name = st.text_input("Your Name/Signature", value="Eye Finder Sales Team")
             sender_email = st.text_input("Your Email (for email template)", value="sales@eyefinder.com") if campaign_type == "📧 Email Introduction" else ""
@@ -2623,6 +2799,34 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
                 f"{sender_name}\n"
                 f"{sender_email}"
             )
+        elif campaign_type == "Follow-up 1: Quick Check-in":
+            subject = f"Re: Collaboration Proposal: Eye Finder & {selected_lead}"
+            message = (
+                f"Hello Team {selected_lead},\n\n"
+                f"I wanted to follow up briefly on the partnership proposal I sent over a few days ago. "
+                f"I understand your schedule is busy, but I'd love to know if you've had a chance to review it.\n\n"
+                f"Do you have 5 minutes for a quick introductory call next week?\n\n"
+                f"Best regards,\n"
+                f"{sender_name}"
+            )
+        elif campaign_type == "Follow-up 2: Demo Proposal":
+            subject = f"Complimentary clinical equipment demonstration for {selected_lead}"
+            message = (
+                f"Dear Director,\n\n"
+                f"Just dropping a note to see if there is any interest in exploring new eye care diagnostic equipment or clinical software for {selected_lead}.\n\n"
+                f"We would be glad to set up a short 10-minute online presentation for your team at any convenient time.\n\n"
+                f"Sincerely,\n"
+                f"{sender_name}"
+            )
+        elif campaign_type == "Follow-up 3: Custom Offer":
+            subject = f"Special Partnership Terms for {selected_lead}"
+            message = (
+                f"Hello,\n\n"
+                f"As a final touchpoint, we are offering special trial terms on our patient management system and diagnostic platforms for premium practices like {selected_lead}.\n\n"
+                f"Please let me know if you would like to receive the custom collaboration plan.\n\n"
+                f"Regards,\n"
+                f"{sender_name}"
+            )
         else:  # Software/EMR Demo Pitch
             subject = f"Transform Patient Workflows at {selected_lead}"
             message = (
@@ -2681,6 +2885,40 @@ if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
                     st.success("✅ Outreach logged! Click below to compose email:")
                     st.link_button("📧 OPEN EMAIL NOW", mailto_url, use_container_width=True)
                     st.session_state.outreach_log_pending = None
+ 
+        # ==========================================
+        # [START] LEAD OUTREACH TIMELINE WIDGET
+        # ==========================================
+        st.markdown("<br><hr style='border-color: var(--panel-border); margin: 20px 0 15px 0;'>", unsafe_allow_html=True)
+        st.markdown(f"<h5 style='color: var(--primary-accent); font-family: \"Orbitron\", sans-serif; font-weight: 700; margin-bottom: 12px; letter-spacing: 1px;'>⏳ LEAD OUTREACH TIMELINE: {selected_lead.upper()}</h5>", unsafe_allow_html=True)
+        
+        if not prior_outreach:
+            st.info("No communications have occurred with this target yet. Ready for Initial Contact.")
+        else:
+            st.markdown("<div class='timeline-container'>", unsafe_allow_html=True)
+            # Sort prior outreach from oldest to newest chronologically for timeline display
+            chrono_history = sorted(prior_outreach, key=lambda x: x["timestamp"])
+            for record in chrono_history:
+                channel_icon = "💬" if record["channel"] == "WhatsApp" else "📧"
+                stage_num = record.get("stage", 1)
+                st.markdown(f"""
+                <div class="timeline-node completed">
+                    <div class="timeline-label">✓ STAGE {stage_num} • {record['channel']} ({record['timestamp']})</div>
+                    <div class="timeline-title">{record['campaign_type']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            # Preview the next pending step
+            st.markdown(f"""
+            <div class="timeline-node pending">
+                <div class="timeline-label" style="color: #f97316;">⚡ STAGE {next_stage} (PENDING)</div>
+                <div class="timeline-title" style="color: var(--text-muted);">Ready to initiate: {campaign_type}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        # ==========================================
+        # [END] LEAD OUTREACH TIMELINE WIDGET
+        # ==========================================
 
         # ============================================
         # 📋 OUTREACH HISTORY LOG PANEL
